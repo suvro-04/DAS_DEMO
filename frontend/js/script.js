@@ -1,167 +1,220 @@
-// ------------------ State Variables ------------------
-let eyesClosedPercent = 0;
-let isYawning = false;
-let headPitch = 0;
-let headYaw = 0;
-let acceleratorActive = false;
-let brakeActive = false;
-let seatbeltNormal = true;
-let seatbeltHoldTimeout = null;
-let drowsinessCounter = 0;
-let highRiskAlertSent = false;
+// Add these at the top with other state variables
+let spacebarHoldStart = 0;
+let spacebarHolding = false;
+let spacebarProgress = 0;
 
-// ------------------ Debounce & Constants ------------------
-let lastUpdate = 0;
-const debounceMs = 200;
-const HOLD_DURATION = 2000; // 2 seconds for spacebar hold
+// Add these function definitions after the state variables section:
 
-// ------------------ Emergency Contacts ------------------
-const emergencyContacts = [
-    { name: "Emergency Services", phone: "911", type: "emergency" },
-    { name: "Family Member 1", phone: "+1-555-0123", type: "family" },
-    { name: "Medical Contact", phone: "+1-555-0124", type: "medical" },
-    { name: "Roadside Assistance", phone: "+1-555-0125", type: "assistance" }
-];
-
-// ------------------ Vehicle Location ------------------
-let currentLocation = {
-    lat: 37.7749,
-    lng: -122.4194,
-    address: "San Francisco, CA, USA"
-};
-
-// ------------------ Backend Simulation ------------------
-async function sendSensorUpdate(sensor, value) {
-    const now = Date.now();
-    if (now - lastUpdate < debounceMs) return;
-    lastUpdate = now;
-
-    try {
-        console.log('[API] Sensor update:', { sensor, value, timestamp: now });
-        // Simulate a backend API call
-        // await fetch('/api/update-sensors', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ sensor, value, timestamp: now }) });
-    } catch (err) {
-        console.error('Failed to send sensor update:', err);
+// ------------------ Keyboard Controls ------------------
+function handleKeyDown(event) {
+    const key = event.key.toLowerCase();
+    
+    switch(key) {
+        case 'a':
+            // Activate accelerator
+            acceleratorActive = true;
+            brakeActive = false;
+            console.log('[CONTROL] Accelerator pressed');
+            sendSensorUpdate('accelerator', true);
+            updateVehicleControlsUI();
+            break;
+            
+        case 'b':
+            // Activate brake
+            brakeActive = true;
+            acceleratorActive = false;
+            console.log('[CONTROL] Brake pressed');
+            sendSensorUpdate('brake', true);
+            updateVehicleControlsUI();
+            break;
+            
+        case ' ':
+            // Spacebar - emergency/seatbelt
+            if (!spacebarHolding) {
+                spacebarHoldStart = Date.now();
+                spacebarHolding = true;
+                spacebarProgress = 0;
+                
+                // Start visual feedback
+                startSpacebarProgress();
+                
+                console.log('[CONTROL] Spacebar hold started');
+            }
+            event.preventDefault(); // Prevent page scrolling
+            break;
     }
 }
 
-// ------------------ Webcam Initialization ------------------
-async function initWebcam() {
-    const webcamContainer = document.querySelector('.webcam-container');
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
+function handleKeyUp(event) {
+    const key = event.key.toLowerCase();
+    
+    switch(key) {
+        case 'a':
+            // Deactivate accelerator after delay
+            setTimeout(() => {
+                acceleratorActive = false;
+                updateVehicleControlsUI();
+                sendSensorUpdate('accelerator', false);
+            }, 3000); // Simulate 3-second delay
+            break;
+            
+        case 'b':
+            // Deactivate brake after delay
+            setTimeout(() => {
+                brakeActive = false;
+                updateVehicleControlsUI();
+                sendSensorUpdate('brake', false);
+            }, 3000); // Simulate 3-second delay
+            break;
+            
+        case ' ':
+            // Spacebar released
+            if (spacebarHolding) {
+                const holdDuration = Date.now() - spacebarHoldStart;
+                
+                // Check if held for at least 5 seconds (changed from 2)
+                if (holdDuration >= 5000) {
+                    // Trigger seatbelt tension spike
+                    seatbeltNormal = false;
+                    console.log('[EMERGENCY] Seatbelt tension spike triggered!');
+                    sendSensorUpdate('seatbelt', true);
+                    
+                    // Send high-risk alert
+                    sendEmergencyAlert('HIGH_RISK');
+                    
+                    // Reset after 2 seconds
+                    setTimeout(() => {
+                        seatbeltNormal = true;
+                        updateVehicleControlsUI();
+                        sendSensorUpdate('seatbelt', false);
+                    }, 2000);
+                }
+                
+                spacebarHolding = false;
+                spacebarProgress = 0;
+                updateSpacebarProgressUI();
+            }
+            event.preventDefault();
+            break;
+    }
+}
 
-        let videoElement = document.getElementById('webcam');
-        if (!videoElement) {
-            videoElement = document.createElement('video');
-            videoElement.id = 'webcam';
-            videoElement.autoplay = true;
-            videoElement.muted = true;
-            videoElement.playsInline = true;
-            if (webcamContainer) webcamContainer.appendChild(videoElement);
+// ------------------ Visual Feedback Functions ------------------
+function startSpacebarProgress() {
+    const interval = setInterval(() => {
+        if (!spacebarHolding) {
+            clearInterval(interval);
+            return;
         }
+        
+        const currentTime = Date.now();
+        const elapsed = currentTime - spacebarHoldStart;
+        spacebarProgress = Math.min((elapsed / 5000) * 100, 100); // 5 seconds = 100%
+        
+        updateSpacebarProgressUI();
+        
+        // If reached 100%, trigger immediately
+        if (spacebarProgress >= 100) {
+            // Trigger seatbelt tension
+            seatbeltNormal = false;
+            sendSensorUpdate('seatbelt', true);
+            sendEmergencyAlert('HIGH_RISK');
+            
+            // Reset
+            setTimeout(() => {
+                seatbeltNormal = true;
+                sendSensorUpdate('seatbelt', false);
+                spacebarHolding = false;
+                updateVehicleControlsUI();
+                updateSpacebarProgressUI();
+            }, 2000);
+            
+            clearInterval(interval);
+        }
+    }, 50);
+}
 
-        videoElement.srcObject = stream;
-
-        simulateMediaPipeProcessing();
-
-    } catch (err) {
-        console.error('Webcam access denied:', err);
-        if (webcamContainer) {
-            webcamContainer.innerHTML = `
-                <div style="padding: 80px 40px; text-align: center; color: #666; background: #f5f5f5; border-radius: 8px;">
-                    <div style="font-size: 48px; margin-bottom: 16px;">📹</div>
-                    <div style="font-size: 16px; margin-bottom: 8px; font-weight: 500;">Camera Access Required</div>
-                    <div style="font-size: 13px;">Please allow camera access to enable live monitoring</div>
-                    <button onclick="initWebcam()" style="margin-top: 20px; padding: 10px 20px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                        Retry Camera Access
-                    </button>
-                </div>`;
+function updateSpacebarProgressUI() {
+    const progressElement = document.getElementById('spacebar-progress');
+    const progressText = document.getElementById('spacebar-text');
+    
+    if (progressElement) {
+        progressElement.style.width = `${spacebarProgress}%`;
+        progressElement.style.backgroundColor = spacebarProgress < 100 ? '#4285f4' : 'red';
+    }
+    
+    if (progressText) {
+        if (spacebarHolding) {
+            const remaining = Math.ceil((5000 - (Date.now() - spacebarHoldStart)) / 1000);
+            progressText.textContent = remaining > 0 ? 
+                `Hold Spacebar for ${remaining}s...` : 
+                'Emergency triggered!';
+        } else {
+            progressText.textContent = 'Hold Spacebar (5s) for emergency';
         }
     }
 }
 
-// ------------------ Simulate MediaPipe Processing ------------------
-function simulateMediaPipeProcessing() {
-    setInterval(() => {
-        // Randomly simulate driver metrics
-        eyesClosedPercent = parseFloat((Math.random() * 15).toFixed(1));
-        isYawning = Math.random() > 0.95;
-        headPitch = parseFloat((Math.random() * 15 - 7.5).toFixed(1));
-        headYaw = parseFloat((Math.random() * 20 - 10).toFixed(1));
-
-        updateMetricsUI();
-        checkDriverStatus();
-
-    }, 1000);
-}
-
-// ------------------ Update Metrics UI ------------------
-function updateMetricsUI() {
-    const eyesElement = document.getElementById('eyes-closed');
-    if (eyesElement) {
-        eyesElement.textContent = `${eyesClosedPercent.toFixed(1)}%`;
-        if (eyesClosedPercent > 10) eyesElement.style.color = 'red';
-        else if (eyesClosedPercent > 5) eyesElement.style.color = 'orange';
-        else eyesElement.style.color = 'green';
+function updateVehicleControlsUI() {
+    // Update accelerator display
+    const acceleratorElement = document.getElementById('accelerator-status');
+    if (acceleratorElement) {
+        acceleratorElement.textContent = acceleratorActive ? 'Active' : 'Inactive';
+        acceleratorElement.style.color = acceleratorActive ? 'green' : '#666';
     }
-
-    const yawningElement = document.getElementById('yawning');
-    if (yawningElement) {
-        yawningElement.textContent = isYawning ? 'Yes' : 'No';
-        yawningElement.style.color = isYawning ? 'red' : 'green';
+    
+    // Update brake display
+    const brakeElement = document.getElementById('brake-status');
+    if (brakeElement) {
+        brakeElement.textContent = brakeActive ? 'Active' : 'Inactive';
+        brakeElement.style.color = brakeActive ? 'red' : '#666';
     }
-
-    const headTiltElement = document.getElementById('head-tilt');
-    if (headTiltElement) {
-        headTiltElement.textContent = `P: ${headPitch}° • Y: ${headYaw}°`;
-        const maxTilt = Math.max(Math.abs(headPitch), Math.abs(headYaw));
-        if (maxTilt > 8) headTiltElement.style.color = 'red';
-        else if (maxTilt > 4) headTiltElement.style.color = 'orange';
-        else headTiltElement.style.color = 'green';
+    
+    // Update seatbelt display
+    const seatbeltElement = document.getElementById('seatbelt-status');
+    if (seatbeltElement) {
+        seatbeltElement.textContent = seatbeltNormal ? 'Normal' : 'Tension Spike';
+        seatbeltElement.style.color = seatbeltNormal ? 'green' : 'red';
     }
 }
 
-// ------------------ Check Driver Status ------------------
-function checkDriverStatus() {
-    const driverStatusElement = document.getElementById('driver-status');
-    if (!driverStatusElement) return;
-
-    const statusIcon = driverStatusElement.querySelector('.status-icon');
-    const statusText = driverStatusElement.querySelector('.status-main');
-    const statusSubtext = driverStatusElement.querySelector('.status-sub');
-
-    let status = 'Normal';
-    let color = 'green';
-    let subtext = 'All systems operational';
-
-    if (eyesClosedPercent > 10 || isYawning || Math.max(Math.abs(headPitch), Math.abs(headYaw)) > 8) {
-        drowsinessCounter++;
-        status = 'Drowsy';
-        color = 'red';
-        subtext = 'Driver attention is low!';
-        if (!highRiskAlertSent && drowsinessCounter > 3) {
-            highRiskAlertSent = true;
-            console.warn('[ALERT] High risk drowsiness detected!');
-        }
-    } else {
-        drowsinessCounter = 0;
-        highRiskAlertSent = false;
+function sendEmergencyAlert(status) {
+    console.log(`[EMERGENCY ALERT] Status: ${status}`);
+    
+    // Simulate sending to backend
+    fetch('/api/send-alert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: status })
+    }).catch(err => {
+        console.error('Failed to send alert:', err);
+    });
+    
+    // Update UI
+    const alertElement = document.getElementById('emergency-alert');
+    if (alertElement) {
+        alertElement.style.display = 'block';
+        alertElement.textContent = `EMERGENCY: ${status} detected!`;
+        
+        // Hide after 5 seconds
+        setTimeout(() => {
+            alertElement.style.display = 'none';
+        }, 5000);
     }
-
-    if (statusIcon) statusIcon.textContent = status === 'Normal' ? '✓' : '⚠️';
-    if (statusText) statusText.textContent = status;
-    if (statusSubtext) statusSubtext.textContent = subtext;
-
-    driverStatusElement.style.color = color;
-
-    // Send backend update
-    sendSensorUpdate('driver-status', status);
 }
 
 // ------------------ Initialize ------------------
 window.addEventListener('DOMContentLoaded', () => {
     initWebcam();
+    
+    // Add keyboard event listeners
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    
+    // Initialize UI
+    updateVehicleControlsUI();
+    updateSpacebarProgressUI();
 });
+
+// Also update the HOLD_DURATION constant (increase to 5 seconds):
+const HOLD_DURATION = 5000; // Changed from 2000 to 5000 (5 seconds)
