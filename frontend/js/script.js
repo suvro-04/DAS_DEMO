@@ -1,110 +1,149 @@
-// Polling for drowsiness data
+// ===============================
+// POLLING DROWSINESS DATA
+// ===============================
 setInterval(() => {
     fetch('http://localhost:5000/drowsiness_data')
-        .then(response => response.json())
+        .then(res => res.json())
         .then(data => {
             document.getElementById('ear').textContent = data.ear;
             document.getElementById('blink-rate').textContent = data.blink_rate;
             document.getElementById('yawn').textContent = data.yawn_detected ? 'Yes' : 'No';
+
             const stateEl = document.getElementById('state');
             stateEl.textContent = data.driver_state;
             stateEl.className = data.driver_state === 'Drowsy' ? 'drowsy' : '';
         })
-        .catch(error => console.error('Error fetching data:', error));
+        .catch(err => console.error('Fetch error:', err));
 }, 1000);
 
-// Keyboard sensor simulation
+// ===============================
+// KEYBOARD SENSOR LOGIC
+// ===============================
 let acceleratorActive = false;
 let brakeActive = false;
-let seatbeltHeld = false;
+
 let seatbeltTimer = null;
+let seatbeltSuspicious = false;
 
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'a' || event.key === 'A') {
+// ---------- KEY DOWN ----------
+document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+
+    // Accelerator
+    if (e.key.toLowerCase() === 'a') {
         acceleratorActive = true;
-        document.getElementById('accelerator').textContent = 'Active';
-        document.getElementById('accelerator').className = 'active';
+        setStatus('accelerator', 'Active', 'active');
     }
-    if (event.key === 'b' || event.key === 'B') {
+
+    // Brake
+    if (e.key.toLowerCase() === 'b') {
         brakeActive = true;
-        document.getElementById('brake').textContent = 'Active';
-        document.getElementById('brake').className = 'active';
+        setStatus('brake', 'Active', 'active');
     }
-    if (event.code === 'Space') {
-        event.preventDefault();
-        if (!seatbeltHeld) {
-            seatbeltHeld = true;
-            seatbeltTimer = setTimeout(() => {
-                document.getElementById('seatbelt').textContent = 'Normal';
-                document.getElementById('seatbelt').className = 'normal';
-            }, 5000);
-        }
+
+    // Seatbelt pressure
+    if (e.code === 'Space' && !seatbeltTimer) {
+        e.preventDefault();
+
+        seatbeltTimer = setTimeout(() => {
+
+            // CASE 1: Brake pressed → Normal behavior
+            if (brakeActive) {
+                seatbeltSuspicious = false;
+                setStatus('seatbelt', 'Normal (Brake)', 'normal');
+            }
+            // CASE 2: No pedals → Suspicious
+            else if (!acceleratorActive && !brakeActive) {
+                seatbeltSuspicious = true;
+                setStatus('seatbelt', 'Suspicious Pressure', 'warning');
+            }
+            // CASE 3: Accelerator active
+            else {
+                seatbeltSuspicious = false;
+                setStatus('seatbelt', 'Normal', 'normal');
+            }
+
+            // Send seatbelt context to backend
+            sendSeatbeltStatus();
+
+        }, 5000);
     }
 });
 
-document.addEventListener('keyup', (event) => {
-    if (event.key === 'a' || event.key === 'A') {
+// ---------- KEY UP ----------
+document.addEventListener('keyup', (e) => {
+
+    if (e.key.toLowerCase() === 'a') {
         acceleratorActive = false;
-        document.getElementById('accelerator').textContent = 'Inactive';
-        document.getElementById('accelerator').className = '';
+        setStatus('accelerator', 'Inactive', '');
     }
-    if (event.key === 'b' || event.key === 'B') {
+
+    if (e.key.toLowerCase() === 'b') {
         brakeActive = false;
-        document.getElementById('brake').textContent = 'Inactive';
-        document.getElementById('brake').className = '';
+        setStatus('brake', 'Inactive', '');
     }
-    if (event.code === 'Space') {
-        seatbeltHeld = false;
-        if (seatbeltTimer) {
-            clearTimeout(seatbeltTimer);
-            seatbeltTimer = null;
+
+    if (e.code === 'Space') {
+        clearTimeout(seatbeltTimer);
+        seatbeltTimer = null;
+
+        if (!seatbeltSuspicious) {
+            setStatus('seatbelt', 'Improper / Released', 'improper');
         }
-        document.getElementById('seatbelt').textContent = 'Improper';
-        document.getElementById('seatbelt').className = 'improper';
     }
 });
 
-// Geolocation and Google Maps
-let map;
-let marker;
+// ===============================
+// SEND SEATBELT DATA TO BACKEND
+// ===============================
+function sendSeatbeltStatus() {
+    fetch('http://localhost:5000/drowsiness_data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            seatbelt_suspicious: seatbeltSuspicious
+        })
+    }).catch(err => console.error('Seatbelt POST error:', err));
+}
+
+// ===============================
+// UI HELPER
+// ===============================
+function setStatus(id, text, cls) {
+    const el = document.getElementById(id);
+    el.textContent = text;
+    el.className = cls;
+}
+
+// ===============================
+// GEOLOCATION (UNCHANGED)
+// ===============================
+let map, marker;
 
 function initMap(lat, lng) {
-    const location = { lat, lng };
+    const loc = { lat, lng };
     map = new google.maps.Map(document.getElementById('map'), {
-        zoom: 15,
-        center: location,
+        center: loc,
+        zoom: 15
     });
-    marker = new google.maps.Marker({
-        position: location,
-        map: map,
-    });
+    marker = new google.maps.Marker({ position: loc, map });
 }
 
 if (navigator.geolocation) {
     navigator.geolocation.watchPosition(
-        (position) => {
-            const lat = position.coords.latitude;
-            const lng = position.coords.longitude;
-            document.getElementById('coords').textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            if (!map) {
-                initMap(lat, lng);
-            } else {
-                const newPos = { lat, lng };
-                marker.setPosition(newPos);
-                map.setCenter(newPos);
+        pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            document.getElementById('coords').textContent =
+                `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+            if (!map) initMap(lat, lng);
+            else {
+                marker.setPosition({ lat, lng });
+                map.setCenter({ lat, lng });
             }
         },
-        (error) => {
-            console.error('Geolocation error:', error);
-            // Default to NYC for demo
-            const lat = 40.7128, lng = -74.0060;
-            document.getElementById('coords').textContent = `${lat}, ${lng}`;
-            initMap(lat, lng);
-        }
+        err => console.error('Geolocation error:', err),
+        { enableHighAccuracy: true }
     );
-} else {
-    // Fallback
-    const lat = 40.7128, lng = -74.0060;
-    document.getElementById('coords').textContent = `${lat}, ${lng}`;
-    initMap(lat, lng);
 }
