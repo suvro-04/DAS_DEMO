@@ -3,201 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Driver Safety Monitor - Google Cloud</title>
-    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Google+Sans+Display:wght@400;500;700&family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <title>Driver Drowsiness Alert System</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBi-Y1Y-ycidaIVVV-BEScVM5UOy2ddl7M"></script>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <div class="logo-section">
-                <div class="google-logo">
-                    <span class="logo-g">
-                        <span class="logo-letter-blue">G</span><span class="logo-letter-red">o</span><span class="logo-letter-yellow">o</span><span class="logo-letter-blue">g</span><span class="logo-letter-green">l</span><span class="logo-letter-red">e</span>
-                    </span>
-                    <span class="product-name">Driver Safety Monitor</span>
-                </div>
-            </div>
-            <div class="nav-items">
-                <button class="nav-button">Overview</button>
-                <button class="nav-button">Analytics</button>
-                <button class="nav-button">History</button>
-                <button class="nav-button primary" onclick="showEmergencyContacts()">Emergency Contacts</button>
-            </div>
+    <div class="dashboard">
+        <h1>Driver Drowsiness Alert System</h1>
+        <div class="section">
+            <h2>Camera Feed</h2>
+            <img id="video-feed" src="http://localhost:5000/video_feed" alt="Video Feed">
         </div>
-    </header>
-    
-    <div class="banner">
-        <div class="banner-content">
-            <div class="banner-icon">!</div>
-            <div class="banner-text">
-                <strong>DEMO MODE</strong> — This is a technology demonstration using simulated data. Not intended for production vehicle deployment.
-                <span id="key-instructions" style="margin-left: 20px;">Press: <strong>A</strong> (Accelerator) • <strong>B</strong> (Brake) • <strong>Hold Space</strong> (Seatbelt Spike)</span>
-            </div>
+        <div class="section">
+            <h2>Drowsiness Metrics</h2>
+            <p>EAR: <span id="ear">0.00</span></p>
+            <p>Blink Rate (per min): <span id="blink-rate">0</span></p>
+            <p>Yawn Detected: <span id="yawn">No</span></p>
+            <p>Driver State: <span id="state">Awake</span></p>
+        </div>
+        <div class="section">
+            <h2>Vehicle Sensors</h2>
+            <p>Accelerator: <span id="accelerator">Inactive</span></p>
+            <p>Brake: <span id="brake">Inactive</span></p>
+            <p>Seatbelt: <span id="seatbelt">Improper</span></p>
+        </div>
+        <div class="section">
+            <h2>Live Map</h2>
+            <p>Coordinates: <span id="coords">Loading...</span></p>
+            <div id="map" style="height: 300px; width: 100%;"></div>
         </div>
     </div>
-    
-    <main>
-        <h1 class="page-title">Real-Time Monitoring Dashboard</h1>
-        <p class="page-subtitle">AI-powered driver drowsiness detection and vehicle safety monitoring system</p>
-        
-        <div class="dashboard">
-            <div class="left-column">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-icon">📹</div>
-                        <h2 class="card-title">Live Camera Feed</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="webcam-container">
-                            <video id="webcam" autoplay muted playsinline></video>
-                            <div class="video-overlay">
-                                <div class="live-indicator"></div>
-                                <span>LIVE • AI ANALYSIS ACTIVE</span>
-                            </div>
-                        </div>
-                        <div class="metrics-grid">
-                            <div class="metric-card">
-                                <div class="metric-label">Eyes Closed</div>
-                                <div class="metric-value" id="eyes-closed">0%</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-label">Yawning</div>
-                                <div class="metric-value" id="yawning">No</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-label">Head Position</div>
-                                <div class="metric-value small" id="head-tilt">Normal</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Emergency Alert Modal -->
-                <div id="emergencyModal" class="emergency-modal">
-                    <div class="emergency-modal-content">
-                        <div class="emergency-modal-header">
-                            <div class="emergency-icon">🚨</div>
-                            <h2>EMERGENCY ALERT TRIGGERED</h2>
-                        </div>
-                        <div class="emergency-modal-body">
-                            <p><strong>Status:</strong> <span id="emergencyStatus">HIGH RISK DETECTED</span></p>
-                            <p><strong>Location:</strong> <span id="emergencyLocation">Acquiring GPS coordinates...</span></p>
-                            <p><strong>Time:</strong> <span id="emergencyTime"></span></p>
-                            <div class="emergency-contact-list">
-                                <h3>Alerting Emergency Contacts:</h3>
-                                <ul id="contactList">
-                                    <li>📱 Emergency Services (911)</li>
-                                    <li>👨‍👩‍👧 Family Member 1 (555-0123)</li>
-                                    <li>🏥 Medical Contact (555-0124)</li>
-                                </ul>
-                            </div>
-                            <div class="emergency-message">
-                                <p>Message sent: <em>"EMERGENCY: Driver in high-risk state. Location: [GPS coordinates]. Immediate attention required."</em></p>
-                            </div>
-                        </div>
-                        <div class="emergency-modal-footer">
-                            <button onclick="closeEmergencyModal()" class="emergency-ok-btn">ACKNOWLEDGE</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="right-column">
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-icon green">⚙️</div>
-                        <h2 class="card-title">Vehicle Sensors</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="sensor-list">
-                            <div class="sensor-item">
-                                <span class="sensor-label">Accelerator Pedal</span>
-                                <div class="sensor-status" id="accelerator">
-                                    <span class="status-indicator inactive"></span>
-                                    <span>Inactive</span>
-                                </div>
-                            </div>
-                            <div class="sensor-item">
-                                <span class="sensor-label">Brake Pedal</span>
-                                <div class="sensor-status" id="brake">
-                                    <span class="status-indicator inactive"></span>
-                                    <span>Inactive</span>
-                                </div>
-                            </div>
-                            <div class="sensor-item">
-                                <span class="sensor-label">Seatbelt Tension</span>
-                                <div class="sensor-status" id="seatbelt">
-                                    <span class="status-indicator"></span>
-                                    <span>Normal</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="keyboard-hint">
-                            💡 <strong>Press & Hold Controls:</strong> 
-                            <div class="key-hints">
-                                <span class="key-hint"><kbd>A</kbd> Accelerator</span>
-                                <span class="key-hint"><kbd>B</kbd> Brake</span>
-                                <span class="key-hint"><kbd>Space</kbd> (2s) Seatbelt Spike</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-icon yellow">⚠️</div>
-                        <h2 class="card-title">Driver Status & Alerts</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="status-banner normal" id="driver-status">
-                            <div class="status-icon">✓</div>
-                            <div>
-                                <div style="font-size: 16px; margin-bottom: 2px;">Status: NORMAL</div>
-                                <div style="font-size: 12px; opacity: 0.8;">All systems operational</div>
-                            </div>
-                        </div>
-                        <div class="alert-log" id="alert-log">
-                            <div class="alert-item">
-                                <div class="alert-time">Just now</div>
-                                <div class="alert-message">System initialized successfully</div>
-                            </div>
-                            <div class="alert-item">
-                                <div class="alert-time">Just now</div>
-                                <div class="alert-message">All sensors connected and operational</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-icon red">📍</div>
-                        <h2 class="card-title">Vehicle Location</h2>
-                    </div>
-                    <div class="card-body">
-                        <div id="map"></div>
-                        <div class="location-info">
-                            <p><strong>Current Location:</strong> <span id="current-location">Acquiring...</span></p>
-                            <p><strong>Last Update:</strong> <span id="location-time">Just now</span></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-    
-    <footer>
-        <p>© 2025 Google LLC • Driver Safety Monitor Technology Demo</p>
-        <div class="footer-links">
-            <a href="#" class="footer-link">Privacy Policy</a>
-            <a href="#" class="footer-link">Terms of Service</a>
-            <a href="#" class="footer-link">Help Center</a>
-            <a href="#" class="footer-link">Send Feedback</a>
-        </div>
-    </footer>
-    
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBi-Y1Y-ycidaIVVV-BEScVM5UOy2ddl7M"></script>
     <script src="js/script.js"></script>
 </body>
 </html>
